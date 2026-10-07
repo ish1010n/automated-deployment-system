@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+*.zip
+*.log
+
+*.backup
+*.backup-*
+backup/
+backups/
+
+.DS_Store

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deployment System</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f7; --card:#ffffff; --ink:#0f172a; --muted:#5b6478; --line:#d9deea;
+  --accent:#3550f5; --accent-ink:#ffffff; --accent-soft:#e6eaff;
+  --ok:#0f9d76; --ok-soft:#ddf5ec; --bad:#d6334a; --bad-soft:#fde6ea;
+  --field:#f7f9fd; --shadow:0 20px 60px -20px rgba(30,50,120,.25);
+  --head:"Sora",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0a0f1f; --card:#121a30; --ink:#eef2ff; --muted:#93a0bf; --line:#27324f;
+    --accent:#6f86ff; --accent-ink:#0a0f1f; --accent-soft:#1c2750;
+    --ok:#3fd6a6; --ok-soft:#10372f; --bad:#ff6b82; --bad-soft:#3a1822;
+    --field:#0e1528; --shadow:0 20px 60px -20px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0a0f1f; --card:#121a30; --ink:#eef2ff; --muted:#93a0bf; --line:#27324f;
+  --accent:#6f86ff; --accent-ink:#0a0f1f; --accent-soft:#1c2750;
+  --ok:#3fd6a6; --ok-soft:#10372f; --bad:#ff6b82; --bad-soft:#3a1822;
+  --field:#0e1528; --shadow:0 20px 60px -20px rgba(0,0,0,.7);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--body);
+  display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow-x:hidden}
+
+/* ambient background */
+.orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.55;pointer-events:none;z-index:0;animation:drift 18s ease-in-out infinite alternate}
+.orb.a{width:420px;height:420px;background:var(--accent);top:-120px;left:-100px;opacity:.28}
+.orb.b{width:360px;height:360px;background:var(--ok);bottom:-120px;right:-80px;opacity:.2;animation-duration:22s}
+@keyframes drift{to{transform:translate(60px,40px) scale(1.15)}}
+
+.shell{position:relative;z-index:1;width:100%;max-width:760px;background:var(--card);border:1px solid var(--line);
+  border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(24px) scale(.98)}}
+.topbar{height:4px;background:linear-gradient(90deg,var(--accent),var(--ok),var(--accent));background-size:200% 100%;animation:sheen 4s linear infinite}
+@keyframes sheen{to{background-position:-200% 0}}
+.pad{padding:40px}
+.head{display:flex;gap:16px;align-items:center;margin-bottom:32px}
+.logo{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);display:grid;place-items:center;flex:none;color:var(--accent)}
+.logo svg{width:26px;height:26px;animation:float 3s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-4px) rotate(-6deg)}}
+h1{font:700 30px/1.15 var(--head);margin:0;letter-spacing:-.02em}
+.sub{margin:6px 0 0;color:var(--muted);font-size:16px}
+
+.view{transition:opacity .35s ease,transform .35s ease}
+.view.hide{opacity:0;transform:translateY(-10px);pointer-events:none}
+[hidden]{display:none!important}
+
+.field{margin-bottom:26px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
+label{font:600 15px var(--body)}
+.meta{font-size:13px;color:var(--muted);transition:color .2s}
+.meta.ok{color:var(--ok)} .meta.bad{color:var(--bad)}
+
+.input-wrap{position:relative}
+input[type=text]{width:100%;height:54px;padding:0 48px 0 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--field);
+  color:var(--ink);font:500 17px var(--body);outline:none;transition:border-color .2s,box-shadow .2s,background .2s}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.7}
+input:focus,.editor:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.input-wrap.valid input{border-color:var(--ok)}
+.input-wrap.invalid input{border-color:var(--bad);box-shadow:0 0 0 4px var(--bad-soft)}
+.tick{position:absolute;right:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:var(--ok);color:#fff;
+  display:grid;place-items:center;transform:scale(0);transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.input-wrap.valid .tick{transform:scale(1)}
+.tick svg{width:14px;height:14px}
+
+.editor{display:flex;border:1.5px solid var(--line);border-radius:12px;background:var(--field);overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.gutter{width:44px;flex:none;padding:16px 0;background:color-mix(in srgb,var(--line) 35%,transparent);color:var(--muted);
+  font:400 13px/1.6 var(--mono);text-align:center;overflow:hidden;user-select:none}
+.gutter span{display:block;height:1.6em;transition:color .2s,background .2s}
+.gutter span.bad{background:var(--bad-soft);color:var(--bad);font-weight:600}
+textarea{flex:1;min-height:200px;max-height:380px;padding:16px;border:0;outline:0;resize:vertical;background:transparent;color:var(--ink);
+  font:400 14px/1.6 var(--mono);white-space:pre;overflow:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.chips small{color:var(--muted);font-size:13px;margin-right:2px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);font:500 13px var(--mono);padding:6px 11px;border-radius:999px;
+  cursor:pointer;transition:transform .15s,border-color .2s,background .2s}
+.chip:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-2px)}
+.chip:active{transform:scale(.95)}
+.err{margin-top:10px;font-size:13.5px;color:var(--bad);min-height:0;overflow:hidden;max-height:0;opacity:0;transition:max-height .3s,opacity .3s}
+.err.show{max-height:60px;opacity:1}
+
+.deploy{position:relative;width:100%;height:58px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);
+  font:700 17px var(--head);cursor:pointer;overflow:hidden;transition:transform .15s,box-shadow .25s;box-shadow:0 10px 24px -10px var(--accent)}
+.deploy:hover{transform:translateY(-2px);box-shadow:0 16px 30px -10px var(--accent)}
+.deploy:active{transform:scale(.985)}
+.deploy::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);
+  transform:translateX(-120%);animation:glint 3.5s ease-in-out infinite}
+@keyframes glint{60%,100%{transform:translateX(120%)}}
+.deploy span{position:relative;display:inline-flex;gap:10px;align-items:center}
+.shake{animation:shake .45s}
+@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+
+/* pipeline */
+.pipe-title{font:700 22px var(--head);margin:0 0 4px}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:22px 0 28px}
+.bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .5s ease}
+.steps{list-style:none;margin:0;padding:0}
+.step{display:flex;gap:16px;align-items:flex-start;position:relative;padding-bottom:26px;opacity:.45;transition:opacity .4s}
+.step:last-child{padding-bottom:0}
+.step::before{content:"";position:absolute;left:17px;top:38px;bottom:2px;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.dot{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);background:var(--card);display:grid;place-items:center;flex:none;position:relative;z-index:1;
+  transition:all .35s;color:var(--muted);font:600 14px var(--head)}
+.dot svg{width:18px;height:18px;display:none}
+.step b{display:block;font:600 16px var(--body);margin-top:6px}
+.step small{color:var(--muted);font-size:14px}
+.step.active{opacity:1}
+.step.active .dot{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 0 var(--accent-soft);animation:pulse 1.4s infinite}
+.step.active .dot::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 10px transparent}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.step.done{opacity:1}
+.step.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.step.done .dot svg{display:block;animation:pop .4s cubic-bezier(.3,1.6,.5,1)}
+.step.done .dot em{display:none}
+.step.done::before{background:var(--ok)}
+@keyframes pop{from{transform:scale(0)}}
+
+.done-card{margin-top:30px;padding:22px;border-radius:14px;background:var(--ok-soft);border:1px solid var(--ok);animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
+.done-card h2{margin:0 0 4px;font:700 20px var(--head);color:var(--ok)}
+.done-card p{margin:0 0 16px;color:var(--ink);font-size:15px}
+.kv{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:14px;margin-bottom:18px}
+.kv span{color:var(--muted)} .kv code{font-family:var(--mono);color:var(--ink)}
+.ghost{height:46px;padding:0 22px;border-radius:12px;border:1.5px solid var(--ok);background:transparent;color:var(--ink);font:600 15px var(--body);cursor:pointer;transition:background .2s,transform .15s}
+.ghost:hover{background:var(--card);transform:translateY(-2px)}
+
+.confetti{position:fixed;top:0;width:9px;height:14px;z-index:5;pointer-events:none;animation:fall 1.8s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg);opacity:0}}
+
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (max-width:600px){
+  body{padding:12px;align-items:flex-start}
+  .pad{padding:26px 20px} h1{font-size:25px} .sub{font-size:15px} .head{margin-bottom:26px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+select,
+input[type=password]{
+  width:100%;
+  height:54px;
+  padding:0 16px;
+  border:1.5px solid var(--line);
+  border-radius:12px;
+  background:var(--field);
+  color:var(--ink);
+  font:500 17px var(--body);
+  outline:none;
+  transition:border-color .2s,box-shadow .2s,background .2s;
+}
+select:focus,
+input[type=password]:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 4px var(--accent-soft);
+}
+.password-wrap{
+  display:flex;
+  gap:10px;
+}
+.password-wrap input{
+  flex:1;
+}
+.password-toggle{
+  height:54px;
+  padding:0 16px;
+  border:1.5px solid var(--line);
+  border-radius:12px;
+  background:var(--card);
+  color:var(--ink);
+  cursor:pointer;
+  font:600 14px var(--body);
+}
+.error{
+  margin-top:15px;
+  padding:12px 14px;
+  border-radius:10px;
+  background:var(--bad-soft);
+  color:var(--bad);
+  display:none;
+}
+
+</style>
+</head>
+<body>
+<div class="orb a"></div><div class="orb b"></div>
+
+<main class="shell">
+  <div class="topbar"></div>
+  <div class="pad">
+    <div class="head">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2.2 2.2 0 0 0-2.9-.1z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.9A12.9 12.9 0 0 1 22 2c0 2.7-.8 7.5-6 11a22 22 0 0 1-4 2z"/><path d="M9 12H4s.6-3 2-4c1.6-1.1 5 0 5 0M12 15v5s3-.6 4-2c1.1-1.6 0-5 0-5"/></svg>
+      </div>
+      <div>
+        <h1>Deployment System</h1>
+        <p class="sub">Deploy the existing project to a selected deployment location.</p>
+      </div>
+    </div>
+
+    
+<!-- Form view -->
+<section id="formView" class="view">
+  <form id="deploymentForm" novalidate>
+
+    <div class="field">
+      <div class="row">
+        <label for="deployment">Deployment</label>
+      </div>
+      <select id="deployment" required>
+        <option value="deployment1">deployment1</option>
+        <option value="deployement2">deployement2</option>
+        <option value="deployement3">deployement3</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <div class="row">
+        <label>Application Environment</label>
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="NODE_ENV">NODE_ENV</label>
+        </div>
+        <select id="NODE_ENV">
+          <option value="production">production</option>
+          <option value="development">development</option>
+          <option value="test">test</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="APP_NAME">APP_NAME</label>
+        </div>
+        <input type="text" id="APP_NAME" value="Portfolio">
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DEPLOYMENT_ID">DEPLOYMENT_ID</label>
+        </div>
+        <input type="text" id="DEPLOYMENT_ID" value="DEP-001">
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="row">
+        <label>Database Configuration</label>
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DB_HOST">DB_HOST</label>
+        </div>
+        <input type="text" id="DB_HOST" value="127.0.0.1">
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DB_PORT">DB_PORT</label>
+        </div>
+        <input type="text" id="DB_PORT" value="3306">
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DB_NAME">DB_NAME</label>
+        </div>
+        <input type="text" id="DB_NAME" value="portfolio">
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DB_USER">DB_USER</label>
+        </div>
+        <input type="text" id="DB_USER" value="app_user">
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label for="DB_PASSWORD">DB_PASSWORD</label>
+        </div>
+        <div class="password-wrap">
+          <input type="password" id="DB_PASSWORD">
+          <button type="button" class="password-toggle" id="passwordToggle">
+            Show
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="error" id="deployError"></div>
+
+    <button type="submit" class="deploy" id="deployButton">
+      <span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+        Deploy now
+      </span>
+    </button>
+
+  </form>
+</section>
+
+
+<!-- Pipeline view -->
+    <section id="pipeView" class="view hide" hidden aria-live="polite">
+      <h2 class="pipe-title" id="pipeTitle">Deploying…</h2>
+      <div class="meta" id="pipeSub"></div>
+      <div class="bar"><i id="barFill"></i></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="done-card" id="doneCard" hidden>
+        <h2>Deployment completed</h2>
+        <p id="doneMsg"></p>
+        <div class="kv" id="doneKv"></div>
+
+        <div class="download-box" id="downloadBox" hidden>
+          <h3>Deployment Details</h3>
+          <div class="kv" id="downloadKv"></div>
+
+          <button type="button" class="ghost" id="downloadDeployment">
+            Download Complete Deployment (.zip)
+          </button>
+
+          <p class="meta" id="downloadStatus"></p>
+        </div>
+
+        <button type="button" class="ghost" id="again">Start another deployment</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+
+<script>
+const $ = id => document.getElementById(id);
+
+const form = $("deploymentForm");
+const formView = $("formView");
+const pipeView = $("pipeView");
+const deployButton = $("deployButton");
+const deployError = $("deployError");
+
+const deployment = $("deployment");
+const NODE_ENV = $("NODE_ENV");
+const APP_NAME = $("APP_NAME");
+const DEPLOYMENT_ID = $("DEPLOYMENT_ID");
+const DB_HOST = $("DB_HOST");
+const DB_PORT = $("DB_PORT");
+const DB_NAME = $("DB_NAME");
+const DB_USER = $("DB_USER");
+const DB_PASSWORD = $("DB_PASSWORD");
+
+const pipeTitle = $("pipeTitle");
+const pipeSub = $("pipeSub");
+const barFill = $("barFill");
+const stepsContainer = $("steps");
+const doneCard = $("doneCard");
+const doneMsg = $("doneMsg");
+const doneKv = $("doneKv");
+const again = $("again");
+
+const downloadBox = $("downloadBox");
+const downloadKv = $("downloadKv");
+const downloadButton = $("downloadDeployment");
+const downloadStatus = $("downloadStatus");
+
+let lastDeployment = null;
+
+downloadButton.addEventListener("click", downloadDeployment);
+
+const STEPS = [
+  ["Validating settings", "Checking deployment and environment configuration"],
+  ["Sending deployment", "Sending deployment request to the server"],
+  ["Waiting for Jenkins", "Waiting for Jenkins to create the build"],
+  ["Jenkins pipeline", "Running the selected Jenkins pipeline"],
+  ["Deployment complete", "Waiting for the final Jenkins result"]
+];
+
+const CHECK =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M20 6 9 17l-5-5"/></svg>';
+
+let timers = [];
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function showError(message) {
+  deployError.textContent = message;
+  deployError.style.display = "block";
+}
+
+function hideError() {
+  deployError.textContent = "";
+  deployError.style.display = "none";
+}
+
+function buildEnvironmentVariables() {
+  return [
+    `NODE_ENV=${NODE_ENV.value}`,
+    `APP_NAME=${APP_NAME.value}`,
+    `DEPLOYMENT_ID=${DEPLOYMENT_ID.value}`,
+    `DB_HOST=${DB_HOST.value}`,
+    `DB_PORT=${DB_PORT.value}`,
+    `DB_NAME=${DB_NAME.value}`,
+    `DB_USER=${DB_USER.value}`,
+    `DB_PASSWORD=${DB_PASSWORD.value}`
+  ].join("\n");
+}
+
+function createSteps() {
+  stepsContainer.innerHTML = STEPS.map((step, index) => `
+    <li class="step" id="step${index + 1}">
+      <div class="dot">
+        <em>${index + 1}</em>
+        ${CHECK}
+      </div>
+      <div>
+        <b>${step[0]}</b>
+        <small>${step[1]}</small>
+      </div>
+    </li>
+  `).join("");
+}
+
+function setStep(number, state) {
+  const step = $(`step${number}`);
+  if (!step) return;
+
+  step.classList.remove("active", "done");
+
+  if (state === "active") {
+    step.classList.add("active");
+  }
+
+  if (state === "done") {
+    step.classList.add("done");
+  }
+
+  const progress = state === "done"
+    ? number
+    : Math.max(0, number - 1);
+
+  barFill.style.width = `${(progress / STEPS.length) * 100}%`;
+}
+
+function resetPipeline() {
+  createSteps();
+  barFill.style.width = "0%";
+  doneCard.hidden = true;
+}
+
+function showPipeline() {
+  formView.classList.add("hide");
+  setTimeout(() => {
+    formView.hidden = true;
+    pipeView.hidden = false;
+    pipeView.classList.remove("hide");
+  }, 250);
+}
+
+function showForm() {
+  pipeView.classList.add("hide");
+
+  setTimeout(() => {
+    pipeView.hidden = true;
+    formView.hidden = false;
+    formView.classList.remove("hide");
+    resetPipeline();
+  }, 250);
+}
+
+async function waitForQueue(queueId) {
+  for (let i = 0; i < 60; i++) {
+    const response = await fetch(
+      `/api/deploy/status/queue/${encodeURIComponent(queueId)}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Queue status returned HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status === "failed") {
+      throw new Error(data.message || "Jenkins queue failed");
+    }
+
+    if (data.buildNumber !== undefined && data.buildNumber !== null) {
+      return data.buildNumber;
+    }
+
+    await sleep(2000);
+  }
+
+  throw new Error("Timed out waiting for Jenkins queue");
+}
+
+async function waitForBuild(buildNumber) {
+  for (let i = 0; i < 120; i++) {
+    const response = await fetch(
+      `/api/deploy/status/build/${encodeURIComponent(buildNumber)}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Build status returned HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.building === true) {
+      await sleep(2000);
+      continue;
+    }
+
+    return data;
+  }
+
+  throw new Error("Timed out waiting for Jenkins build");
+}
+
+async function downloadDeployment() {
+  if (!lastDeployment) {
+    downloadStatus.textContent = "No completed deployment available.";
+    return;
+  }
+
+  const { deployment, buildNumber } = lastDeployment;
+
+  downloadButton.disabled = true;
+  downloadButton.textContent = "Preparing ZIP...";
+  downloadStatus.textContent = "Preparing deployment download...";
+
+  try {
+    const response = await fetch(
+      `/api/deploy/download/${encodeURIComponent(deployment)}/${encodeURIComponent(buildNumber)}`
+    );
+
+    if (!response.ok) {
+      let message = `Download failed (HTTP ${response.status})`;
+
+      try {
+        const data = await response.json();
+        if (data.message) message = data.message;
+      } catch (_) {}
+
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${deployment}-build-${buildNumber}.zip`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    URL.revokeObjectURL(url);
+
+    downloadStatus.textContent = "ZIP downloaded successfully.";
+  } catch (error) {
+    console.error(error);
+    downloadStatus.textContent = error.message;
+  } finally {
+    downloadButton.disabled = false;
+    downloadButton.textContent = "Download Complete Deployment (.zip)";
+  }
+}
+
+
+async function startDeployment() {
+  hideError();
+
+  const env = buildEnvironmentVariables();
+
+  if (!deployment.value) {
+    showError("Please select a deployment.");
+    return;
+  }
+
+  if (!APP_NAME.value.trim() ||
+      !DEPLOYMENT_ID.value.trim() ||
+      !DB_HOST.value.trim() ||
+      !DB_PORT.value.trim() ||
+      !DB_NAME.value.trim() ||
+      !DB_USER.value.trim() ||
+      !DB_PASSWORD.value.trim()) {
+    showError("Please complete all required fields.");
+    return;
+  }
+
+  deployButton.disabled = true;
+
+  resetPipeline();
+  showPipeline();
+
+  pipeTitle.textContent = "Deploying…";
+  pipeSub.textContent = deployment.value;
+
+  try {
+    setStep(1, "active");
+
+    await sleep(500);
+
+    setStep(1, "done");
+    setStep(2, "active");
+
+    const response = await fetch("/api/deploy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        deployment: deployment.value,
+        env
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Deployment request failed");
+    }
+
+    setStep(2, "done");
+    setStep(3, "active");
+
+    const buildNumber = await waitForQueue(data.queueId);
+
+    setStep(3, "done");
+    setStep(4, "active");
+
+    const result = await waitForBuild(buildNumber);
+
+    if (result.status !== "success" && result.result !== "SUCCESS") {
+      throw new Error(
+        `Jenkins build #${buildNumber} finished with result: ${result.result || "UNKNOWN"}`
+      );
+    }
+
+    setStep(4, "done");
+    setStep(5, "active");
+
+    await sleep(500);
+
+    setStep(5, "done");
+
+    pipeTitle.textContent = "Deployment completed";
+    pipeSub.textContent = `Jenkins build #${buildNumber} completed successfully`;
+
+    doneMsg.textContent =
+      `The project was deployed to ${deployment.value}.`;
+
+    doneKv.innerHTML = `
+      <span>Deployment: <code>${deployment.value}</code></span>
+      <span>Jenkins Build: <code>#${buildNumber}</code></span>
+      <span>Location: <code>${data.location}</code></span>
+    `;
+
+    lastDeployment = {
+      deployment: deployment.value,
+      buildNumber,
+      status: "SUCCESS",
+      location: data.location
+    };
+
+    downloadKv.innerHTML = `
+      <span>Status: <code>SUCCESS</code></span>
+      <span>Deployment: <code>${deployment.value}</code></span>
+      <span>Jenkins Build: <code>#${buildNumber}</code></span>
+      <span>Location: <code>${data.location}</code></span>
+    `;
+
+    downloadStatus.textContent = "";
+    downloadBox.hidden = false;
+    doneCard.hidden = false;
+
+  } catch (error) {
+    console.error(error);
+
+    pipeTitle.textContent = "Deployment failed";
+    pipeSub.textContent = error.message;
+
+    showError(error.message);
+    deployButton.disabled = false;
+  }
+}
+
+$("passwordToggle").addEventListener("click", () => {
+  if (DB_PASSWORD.type === "password") {
+    DB_PASSWORD.type = "text";
+    $("passwordToggle").textContent = "Hide";
+  } else {
+    DB_PASSWORD.type = "password";
+    $("passwordToggle").textContent = "Show";
+  }
+});
+
+form.addEventListener("submit", event => {
+  event.preventDefault();
+  startDeployment();
+});
+
+again.addEventListener("click", () => {
+  deployButton.disabled = false;
+  hideError();
+  showForm();
+});
+
+createSteps();
+resetPipeline();
+</script>
+
+</body>
+</html>

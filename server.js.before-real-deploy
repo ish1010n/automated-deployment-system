@@ -1,0 +1,89 @@
+require("dotenv").config();
+
+const express = require("express");
+
+const app = express();
+const PORT = 5000;
+
+app.use(express.json());
+app.use(express.static("public"));
+
+const deployments = {
+    deployment1: "/var/www/deployment1",
+    deployement2: "/var/www/deployement2",
+    deployement3: "/var/www/deployement3"
+};
+
+const JENKINS_URL = process.env.JENKINS_URL;
+const JENKINS_USER = process.env.JENKINS_USER;
+const JENKINS_TOKEN = process.env.JENKINS_TOKEN;
+
+app.get("/api/health", (req, res) => {
+    res.json({
+        status: "ok",
+        service: "deployment-system"
+    });
+});
+
+app.post("/api/deploy", async (req, res) => {
+    const { deployment } = req.body;
+
+    if (!deployment) {
+        return res.status(400).json({
+            status: "error",
+            message: "deployment is required"
+        });
+    }
+
+    const deploymentPath = deployments[deployment];
+
+    if (!deploymentPath) {
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid deployment name",
+            availableDeployments: Object.keys(deployments)
+        });
+    }
+
+    try {
+        const auth = Buffer
+            .from(`${JENKINS_USER}:${JENKINS_TOKEN}`)
+            .toString("base64");
+
+        const response = await fetch(
+            `${JENKINS_URL}/job/Portfolio-Deployment/buildWithParameters?DEPLOYMENT=${encodeURIComponent(deployment)}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": `Basic ${auth}`
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Jenkins returned HTTP ${response.status}`
+            );
+        }
+
+        res.json({
+            status: "accepted",
+            message: "Deployment triggered successfully",
+            deployment,
+            location: deploymentPath
+        });
+
+    } catch (error) {
+        console.error("Jenkins deployment error:", error.message);
+
+        res.status(500).json({
+            status: "error",
+            message: "Failed to trigger Jenkins deployment",
+            error: error.message
+        });
+    }
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Deployment API running on port ${PORT}`);
+});

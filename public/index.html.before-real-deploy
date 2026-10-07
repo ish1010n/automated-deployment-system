@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deployment System</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f7; --card:#ffffff; --ink:#0f172a; --muted:#5b6478; --line:#d9deea;
+  --accent:#3550f5; --accent-ink:#ffffff; --accent-soft:#e6eaff;
+  --ok:#0f9d76; --ok-soft:#ddf5ec; --bad:#d6334a; --bad-soft:#fde6ea;
+  --field:#f7f9fd; --shadow:0 20px 60px -20px rgba(30,50,120,.25);
+  --head:"Sora",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0a0f1f; --card:#121a30; --ink:#eef2ff; --muted:#93a0bf; --line:#27324f;
+    --accent:#6f86ff; --accent-ink:#0a0f1f; --accent-soft:#1c2750;
+    --ok:#3fd6a6; --ok-soft:#10372f; --bad:#ff6b82; --bad-soft:#3a1822;
+    --field:#0e1528; --shadow:0 20px 60px -20px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0a0f1f; --card:#121a30; --ink:#eef2ff; --muted:#93a0bf; --line:#27324f;
+  --accent:#6f86ff; --accent-ink:#0a0f1f; --accent-soft:#1c2750;
+  --ok:#3fd6a6; --ok-soft:#10372f; --bad:#ff6b82; --bad-soft:#3a1822;
+  --field:#0e1528; --shadow:0 20px 60px -20px rgba(0,0,0,.7);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--body);
+  display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow-x:hidden}
+
+/* ambient background */
+.orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.55;pointer-events:none;z-index:0;animation:drift 18s ease-in-out infinite alternate}
+.orb.a{width:420px;height:420px;background:var(--accent);top:-120px;left:-100px;opacity:.28}
+.orb.b{width:360px;height:360px;background:var(--ok);bottom:-120px;right:-80px;opacity:.2;animation-duration:22s}
+@keyframes drift{to{transform:translate(60px,40px) scale(1.15)}}
+
+.shell{position:relative;z-index:1;width:100%;max-width:760px;background:var(--card);border:1px solid var(--line);
+  border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(24px) scale(.98)}}
+.topbar{height:4px;background:linear-gradient(90deg,var(--accent),var(--ok),var(--accent));background-size:200% 100%;animation:sheen 4s linear infinite}
+@keyframes sheen{to{background-position:-200% 0}}
+.pad{padding:40px}
+.head{display:flex;gap:16px;align-items:center;margin-bottom:32px}
+.logo{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);display:grid;place-items:center;flex:none;color:var(--accent)}
+.logo svg{width:26px;height:26px;animation:float 3s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-4px) rotate(-6deg)}}
+h1{font:700 30px/1.15 var(--head);margin:0;letter-spacing:-.02em}
+.sub{margin:6px 0 0;color:var(--muted);font-size:16px}
+
+.view{transition:opacity .35s ease,transform .35s ease}
+.view.hide{opacity:0;transform:translateY(-10px);pointer-events:none}
+[hidden]{display:none!important}
+
+.field{margin-bottom:26px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
+label{font:600 15px var(--body)}
+.meta{font-size:13px;color:var(--muted);transition:color .2s}
+.meta.ok{color:var(--ok)} .meta.bad{color:var(--bad)}
+
+.input-wrap{position:relative}
+input[type=text]{width:100%;height:54px;padding:0 48px 0 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--field);
+  color:var(--ink);font:500 17px var(--body);outline:none;transition:border-color .2s,box-shadow .2s,background .2s}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.7}
+input:focus,.editor:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.input-wrap.valid input{border-color:var(--ok)}
+.input-wrap.invalid input{border-color:var(--bad);box-shadow:0 0 0 4px var(--bad-soft)}
+.tick{position:absolute;right:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:var(--ok);color:#fff;
+  display:grid;place-items:center;transform:scale(0);transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.input-wrap.valid .tick{transform:scale(1)}
+.tick svg{width:14px;height:14px}
+
+.editor{display:flex;border:1.5px solid var(--line);border-radius:12px;background:var(--field);overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.gutter{width:44px;flex:none;padding:16px 0;background:color-mix(in srgb,var(--line) 35%,transparent);color:var(--muted);
+  font:400 13px/1.6 var(--mono);text-align:center;overflow:hidden;user-select:none}
+.gutter span{display:block;height:1.6em;transition:color .2s,background .2s}
+.gutter span.bad{background:var(--bad-soft);color:var(--bad);font-weight:600}
+textarea{flex:1;min-height:200px;max-height:380px;padding:16px;border:0;outline:0;resize:vertical;background:transparent;color:var(--ink);
+  font:400 14px/1.6 var(--mono);white-space:pre;overflow:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.chips small{color:var(--muted);font-size:13px;margin-right:2px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);font:500 13px var(--mono);padding:6px 11px;border-radius:999px;
+  cursor:pointer;transition:transform .15s,border-color .2s,background .2s}
+.chip:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-2px)}
+.chip:active{transform:scale(.95)}
+.err{margin-top:10px;font-size:13.5px;color:var(--bad);min-height:0;overflow:hidden;max-height:0;opacity:0;transition:max-height .3s,opacity .3s}
+.err.show{max-height:60px;opacity:1}
+
+.deploy{position:relative;width:100%;height:58px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);
+  font:700 17px var(--head);cursor:pointer;overflow:hidden;transition:transform .15s,box-shadow .25s;box-shadow:0 10px 24px -10px var(--accent)}
+.deploy:hover{transform:translateY(-2px);box-shadow:0 16px 30px -10px var(--accent)}
+.deploy:active{transform:scale(.985)}
+.deploy::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);
+  transform:translateX(-120%);animation:glint 3.5s ease-in-out infinite}
+@keyframes glint{60%,100%{transform:translateX(120%)}}
+.deploy span{position:relative;display:inline-flex;gap:10px;align-items:center}
+.shake{animation:shake .45s}
+@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+
+/* pipeline */
+.pipe-title{font:700 22px var(--head);margin:0 0 4px}
+.bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:22px 0 28px}
+.bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .5s ease}
+.steps{list-style:none;margin:0;padding:0}
+.step{display:flex;gap:16px;align-items:flex-start;position:relative;padding-bottom:26px;opacity:.45;transition:opacity .4s}
+.step:last-child{padding-bottom:0}
+.step::before{content:"";position:absolute;left:17px;top:38px;bottom:2px;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.dot{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);background:var(--card);display:grid;place-items:center;flex:none;position:relative;z-index:1;
+  transition:all .35s;color:var(--muted);font:600 14px var(--head)}
+.dot svg{width:18px;height:18px;display:none}
+.step b{display:block;font:600 16px var(--body);margin-top:6px}
+.step small{color:var(--muted);font-size:14px}
+.step.active{opacity:1}
+.step.active .dot{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 0 var(--accent-soft);animation:pulse 1.4s infinite}
+.step.active .dot::after{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 10px transparent}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.step.done{opacity:1}
+.step.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.step.done .dot svg{display:block;animation:pop .4s cubic-bezier(.3,1.6,.5,1)}
+.step.done .dot em{display:none}
+.step.done::before{background:var(--ok)}
+@keyframes pop{from{transform:scale(0)}}
+
+.done-card{margin-top:30px;padding:22px;border-radius:14px;background:var(--ok-soft);border:1px solid var(--ok);animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
+.done-card h2{margin:0 0 4px;font:700 20px var(--head);color:var(--ok)}
+.done-card p{margin:0 0 16px;color:var(--ink);font-size:15px}
+.kv{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:14px;margin-bottom:18px}
+.kv span{color:var(--muted)} .kv code{font-family:var(--mono);color:var(--ink)}
+.ghost{height:46px;padding:0 22px;border-radius:12px;border:1.5px solid var(--ok);background:transparent;color:var(--ink);font:600 15px var(--body);cursor:pointer;transition:background .2s,transform .15s}
+.ghost:hover{background:var(--card);transform:translateY(-2px)}
+
+.confetti{position:fixed;top:0;width:9px;height:14px;z-index:5;pointer-events:none;animation:fall 1.8s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg);opacity:0}}
+
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (max-width:600px){
+  body{padding:12px;align-items:flex-start}
+  .pad{padding:26px 20px} h1{font-size:25px} .sub{font-size:15px} .head{margin-bottom:26px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<div class="orb a"></div><div class="orb b"></div>
+
+<main class="shell">
+  <div class="topbar"></div>
+  <div class="pad">
+    <div class="head">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2.2 2.2 0 0 0-2.9-.1z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.9A12.9 12.9 0 0 1 22 2c0 2.7-.8 7.5-6 11a22 22 0 0 1-4 2z"/><path d="M9 12H4s.6-3 2-4c1.6-1.1 5 0 5 0M12 15v5s3-.6 4-2c1.1-1.6 0-5 0-5"/></svg>
+      </div>
+      <div>
+        <h1>Deployment System</h1>
+        <p class="sub">Deploy the existing project to a selected deployment location.</p>
+      </div>
+    </div>
+
+    <!-- Form view -->
+    <section id="formView" class="view">
+      <form id="deploymentForm" novalidate>
+        <div class="field">
+          <div class="row">
+            <label for="deploymentName">Deployment name</label>
+            <span class="meta" id="nameMeta">Letters, numbers, - and _</span>
+          </div>
+          <div class="input-wrap" id="nameWrap">
+            <input type="text" id="deploymentName" name="deploymentName" placeholder="e.g. deployment1" autocomplete="off" spellcheck="false" required>
+            <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="row">
+            <label for="envVariables">Environment variables</label>
+            <span class="meta" id="envMeta">0 variables</span>
+          </div>
+          <div class="editor">
+            <div class="gutter" id="gutter" aria-hidden="true"></div>
+            <textarea id="envVariables" name="envVariables" spellcheck="false" placeholder="DEPLOYMENT_ID=DEP-001&#10;NODE_ENV=production"></textarea>
+          </div>
+          <div class="chips">
+            <small>Quick add:</small>
+            <button type="button" class="chip" data-add="NODE_ENV=production">NODE_ENV</button>
+            <button type="button" class="chip" data-add="DEPLOYMENT_ID=DEP-001">DEPLOYMENT_ID</button>
+            <button type="button" class="chip" data-add="PORT=3000">PORT</button>
+          </div>
+          <div class="err" id="envErr" role="alert"></div>
+          <div class="meta" style="margin-top:10px">One variable per line, written as KEY=value. Lines starting with # are ignored.</div>
+        </div>
+
+        <button type="submit" class="deploy" id="deployButton">
+          <span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            Deploy now
+          </span>
+        </button>
+      </form>
+    </section>
+
+    <!-- Pipeline view -->
+    <section id="pipeView" class="view hide" hidden aria-live="polite">
+      <h2 class="pipe-title" id="pipeTitle">Deploying…</h2>
+      <div class="meta" id="pipeSub"></div>
+      <div class="bar"><i id="barFill"></i></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="done-card" id="doneCard" hidden>
+        <h2>Deployment is live</h2>
+        <p id="doneMsg"></p>
+        <div class="kv" id="doneKv"></div>
+        <button type="button" class="ghost" id="again">Start another deployment</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const form=$("deploymentForm"), nameInput=$("deploymentName"), nameWrap=$("nameWrap"), nameMeta=$("nameMeta");
+const env=$("envVariables"), gutter=$("gutter"), envMeta=$("envMeta"), envErr=$("envErr");
+const formView=$("formView"), pipeView=$("pipeView");
+const NAME_RE=/^[A-Za-z0-9][A-Za-z0-9_-]{1,39}$/, VAR_RE=/^[A-Za-z_][A-Za-z0-9_]*=.*$/;
+
+/* name validation */
+function checkName(){
+  const v=nameInput.value.trim();
+  nameWrap.classList.remove("valid","invalid"); nameMeta.className="meta";
+  if(!v){nameMeta.textContent="Letters, numbers, - and _";return false}
+  if(NAME_RE.test(v)){nameWrap.classList.add("valid");nameMeta.textContent="Looks good";nameMeta.classList.add("ok");return true}
+  nameWrap.classList.add("invalid");nameMeta.classList.add("bad");
+  nameMeta.textContent="Use 2–40 letters, numbers, - or _";return false;
+}
+nameInput.addEventListener("input",checkName);
+
+/* env editor */
+function parseEnv(){
+  const lines=env.value.split("\n"); const vars=[], bad=[];
+  lines.forEach((l,i)=>{const t=l.trim(); if(!t||t.startsWith("#"))return; VAR_RE.test(t)?vars.push(t):bad.push(i+1)});
+  return {lines,vars,bad};
+}
+function renderEnv(){
+  const {lines,vars,bad}=parseEnv();
+  gutter.innerHTML=lines.map((_,i)=>`<span class="${bad.includes(i+1)?"bad":""}">${i+1}</span>`).join("");
+  gutter.scrollTop=env.scrollTop;
+  envMeta.className="meta"+(bad.length?" bad":vars.length?" ok":"");
+  envMeta.textContent=bad.length?`${bad.length} line${bad.length>1?"s":""} need fixing`:`${vars.length} variable${vars.length===1?"":"s"}`;
+  envErr.classList.toggle("show",bad.length>0);
+  if(bad.length)envErr.textContent=`Line ${bad.join(", ")}: write it as KEY=value, with no spaces before the =.`;
+  return bad.length===0;
+}
+env.addEventListener("input",renderEnv);
+env.addEventListener("scroll",()=>gutter.scrollTop=env.scrollTop);
+document.querySelectorAll(".chip").forEach(c=>c.addEventListener("click",()=>{
+  const key=c.dataset.add.split("=")[0];
+  if(env.value.split("\n").some(l=>l.startsWith(key+"=")))return;
+  env.value=(env.value.trim()?env.value.replace(/\n*$/,"\n"):"")+c.dataset.add+"\n";
+  renderEnv(); env.focus();
+}));
+renderEnv();
+
+/* deploy pipeline (simulated front-end flow) */
+const STEPS=[
+  ["Validating settings","Checking name and environment variables",900],
+  ["Building project","Installing dependencies and compiling",1700],
+  ["Uploading files","Sending the build to the deployment location",1300],
+  ["Going live","Switching traffic to the new version",1000]
+];
+const CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+let timers=[];
+
+function swap(from,to){
+  from.classList.add("hide");
+  setTimeout(()=>{from.hidden=true;to.hidden=false;requestAnimationFrame(()=>to.classList.remove("hide"))},350);
+}
+
+form.addEventListener("submit",e=>{
+  e.preventDefault();
+  const okName=checkName(), okEnv=renderEnv();
+  if(!okName||!okEnv){
+    const btn=$("deployButton"); btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake");
+    (okName?env:nameInput).focus();
+    if(!okName&&!nameInput.value.trim()){nameWrap.classList.add("invalid");nameMeta.className="meta bad";nameMeta.textContent="Enter a deployment name"}
+    return;
+  }
+  const name=nameInput.value.trim(), vars=parseEnv().vars;
+  console.log("Deployment Name:",name); console.log("Environment Variables:",env.value);
+  runPipeline(name,vars);
+});
+
+function runPipeline(name,vars){
+  $("pipeTitle").textContent=`Deploying ${name}`;
+  $("pipeSub").textContent=`${vars.length} environment variable${vars.length===1?"":"s"} will be applied`;
+  $("doneCard").hidden=true; $("barFill").style.width="0";
+  $("steps").innerHTML=STEPS.map((s,i)=>`<li class="step" id="s${i}"><span class="dot"><em>${i+1}</em>${CHECK}</span><div><b>${s[0]}</b><small>${s[1]}</small></div></li>`).join("");
+  swap(formView,pipeView);
+  const start=Date.now(); let t=700;
+  STEPS.forEach((s,i)=>{
+    timers.push(setTimeout(()=>{$("s"+i).classList.add("active");$("barFill").style.width=(i/STEPS.length*100+6)+"%"},t));
+    t+=s[2];
+    timers.push(setTimeout(()=>{const el=$("s"+i);el.classList.remove("active");el.classList.add("done");$("barFill").style.width=((i+1)/STEPS.length*100)+"%"},t));
+  });
+  timers.push(setTimeout(()=>finish(name,vars,Date.now()-start),t+300));
+}
+
+function finish(name,vars,ms){
+  $("pipeTitle").textContent=`${name} deployed`;
+  $("doneMsg").textContent="Your project has been deployed to the selected location.";
+  $("doneKv").innerHTML=`<div><span>Name </span><code>${name.replace(/[<>&]/g,"")}</code></div><div><span>Variables </span><code>${vars.length}</code></div><div><span>Time </span><code>${(ms/1000).toFixed(1)}s</code></div>`;
+  $("doneCard").hidden=false; burst();
+}
+
+function burst(){
+  if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
+  const colors=["#3550f5","#0f9d76","#f5a524","#e5484d","#8e4ec6"];
+  for(let i=0;i<46;i++){
+    const c=document.createElement("i"); c.className="confetti";
+    c.style.left=Math.random()*100+"vw"; c.style.background=colors[i%colors.length];
+    c.style.animationDelay=Math.random()*.5+"s"; c.style.borderRadius=i%3?"2px":"50%";
+    document.body.appendChild(c); setTimeout(()=>c.remove(),2600);
+  }
+}
+
+$("again").addEventListener("click",()=>{
+  timers.forEach(clearTimeout); timers=[];
+  form.reset(); checkName(); renderEnv();
+  swap(pipeView,formView); setTimeout(()=>nameInput.focus(),450);
+});
+</script>
+</body>
+</html>
